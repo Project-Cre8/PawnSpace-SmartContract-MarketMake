@@ -1,0 +1,35 @@
+name: truffle-test
+
+# Controls when the action will run. Triggers the workflow on push or pull request 
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v1
+      - name: setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: 10.x
+          registry-url: 'https://registry.npmjs.org'
+      - name: install modules
+        run: npm install
+      - name: install ganache
+        run: npm install ganache-cli
+      - name: start ganache
+        run: node_modules/.bin/ganache-cli --port 7545 -a 100 &
+      - name: install truffle
+        run: |
+          npm i truffle
+          node_modules/.bin/truffle version
+      - name: exec truffle test
+        run: node_modules/.bin/truffle test --network test

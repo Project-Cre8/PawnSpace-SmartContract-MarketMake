@@ -1,0 +1,29 @@
+{
+  "name": "pawnspace-smartcontract-marketmake",
+  "version": "1.0.0",
+  "description": "",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.3.0"
+  },
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.10"
+  },
+  "scripts": {
+    "build": "truffle build",
+    "test": "truffle test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Project-Cre8/PawnSpace-SmartContract-MarketMake.git"
+  },
+  "author": "Project Cre8",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Project-Cre8/PawnSpace-SmartContract-MarketMake/issues"
+  },
+  "homepage": "https://github.com/Project-Cre8/PawnSpace-SmartContract-MarketMake#readme"
+}

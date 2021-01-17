@@ -201,7 +201,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
     }
 
     function payback(uint256 orderId) external override {
-        require(_exists(orderId), 'PawnSpace: burn for NONEXIST_ORDER');
+        require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
         require(orders[orderId].offeredBlockTimestamp > 0, 'PawnSpace: NOT_ACCEPTED');
         require(
