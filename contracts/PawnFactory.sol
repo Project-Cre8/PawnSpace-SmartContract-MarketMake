@@ -11,8 +11,6 @@ contract PawnFactory is IPawnFactory {
     mapping(address => address) public override getSpace;
     address[] public override allSpaces;
 
-    event SpaceCreated(address indexed token, address space, uint256 length);
-
     constructor(address _feeToSetter) {
         feeToSetter = _feeToSetter;
     }
