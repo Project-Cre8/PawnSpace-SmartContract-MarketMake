@@ -7,12 +7,23 @@ import './PawnSpace.sol';
 contract PawnFactory is IPawnFactory {
     address public override feeTo;
     address public override feeToSetter;
+    address public DAI;
+    address public aDAI;
+    address public AAVE;
 
     mapping(address => address) public override getSpace;
     address[] public override allSpaces;
 
-    constructor(address _feeToSetter) {
+    constructor(
+        address _feeToSetter,
+        address dai,
+        address adai,
+        address lendingPool
+    ) {
         feeToSetter = _feeToSetter;
+        DAI = dai;
+        aDAI = adai;
+        AAVE = lendingPool;
     }
 
     function allSpacesLength() external view override returns (uint256) {
@@ -27,7 +38,7 @@ contract PawnFactory is IPawnFactory {
         assembly {
             space := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IPawnSpace(space).initialize(token);
+        IPawnSpace(space).initialize(token, DAI, aDAI, AAVE);
         getSpace[token] = space;
         allSpaces.push(space);
         emit SpaceCreated(token, space, allSpaces.length);

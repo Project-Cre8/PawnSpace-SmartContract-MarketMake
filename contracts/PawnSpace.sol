@@ -10,6 +10,7 @@ import '@openzeppelin/contracts/token/ERC721/IERC721Enumerable.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
 import '@openzeppelin/contracts/utils/EnumerableSet.sol';
+import './interfaces/ILendingPool.sol';
 
 contract PawnSpace is IPawnSpace, ERC721 {
     using SafeMath for uint256;
@@ -18,7 +19,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
 
     uint256 public constant MINIMUM_LIQUIDITY = 10**3;
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
-    address public constant STABLE_TOKEN = 0xC4375B7De8af5a38a93548eb8453a498222C4fF2; // DAI
+    address private daiAddress;
+    IERC20 private DAI;
+    IERC20 private aDAI;
+    ILendingPool private AAVE;
 
     address public override factory;
     address public override nftToken;
@@ -27,24 +31,19 @@ contract PawnSpace is IPawnSpace, ERC721 {
 
     struct Order {
         uint256[] tokenIds;
-        uint256 period;
         uint256 requestAmount;
         uint256 interest;
+        uint256 period;
+        uint256 additionalCollateral;
         address offeror;
-        uint256 createdBlockTimestamp;
-        uint256 offeredBlockTimestamp;
+        uint256 createdAt;
+        uint256 offeredAt;
+        uint256 paidLoanAt;
+        uint256 withdrewAt;
     }
 
     mapping(uint256 => Order) public orders;
-    // mapping(uint256 => uint256) internal _offerIds;
-
-    uint256 private unlocked = 1;
-    modifier lock() {
-        require(unlocked == 1, 'PawnSpace: LOCKED');
-        unlocked = 0;
-        _;
-        unlocked = 1;
-    }
+    uint256 totalAdditionalCollateral;
 
     function getOrders() external view override returns (uint256[] memory ids) {
         require(totalSupply() > 0, 'PawnSpace: NONEXIST_ORDERS');
@@ -78,23 +77,29 @@ contract PawnSpace is IPawnSpace, ERC721 {
             uint256[] memory tokenIds,
             address owner,
             uint256 requestAmount,
-            uint256 period,
             uint256 interest,
+            uint256 period,
+            uint256 additionalCollateral,
             address offeror,
-            uint256 createdBlockTimestamp,
-            uint256 offeredBlockTimestamp
+            uint256 createdAt,
+            uint256 offeredAt,
+            uint256 paidLoanAt,
+            uint256 withdrewAt
         )
     {
         require(_exists(id), 'PawnSpace: NONEXIST_ORDER');
 
         owner = ownerOf(id);
         tokenIds = orders[id].tokenIds;
-        period = orders[id].period;
         requestAmount = orders[id].requestAmount;
         interest = orders[id].interest;
+        period = orders[id].period;
+        additionalCollateral = orders[id].additionalCollateral;
         offeror = orders[id].offeror;
-        createdBlockTimestamp = orders[id].createdBlockTimestamp;
-        offeredBlockTimestamp = orders[id].offeredBlockTimestamp;
+        createdAt = orders[id].createdAt;
+        offeredAt = orders[id].offeredAt;
+        paidLoanAt = orders[id].paidLoanAt;
+        withdrewAt = orders[id].withdrewAt;
     }
 
     function _safeTransfer(
@@ -111,48 +116,88 @@ contract PawnSpace is IPawnSpace, ERC721 {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address _token) external override {
+    function initialize(
+        address _token,
+        address _dai,
+        address _aDai,
+        address _lendingPool
+    ) external override {
         require(msg.sender == factory, 'PawnSpace: FORBIDDEN'); // sufficient check
         nftToken = _token;
+        daiAddress = _dai;
+        DAI = IERC20(daiAddress);
+        aDAI = IERC20(_aDai);
+        AAVE = ILendingPool(_lendingPool);
     }
 
     function order(
         uint256[] calldata tokenIds,
         uint256 requestAmount,
-        uint256 period
+        uint256 interest,
+        uint256 period,
+        uint256 additionalCollateral
     ) external override returns (uint256 orderId) {
         require(tokenIds.length > 0, 'PawnSpace: NO_NFT');
+        require(requestAmount > 0, 'PawnSpace: ZERO_REQUEST');
 
+        // Receive Collateral Tokens
         for (uint256 i = 0; i < tokenIds.length; i++) {
             IERC721(nftToken).transferFrom(msg.sender, address(this), tokenIds[i]);
         }
 
+        // Deposit DAI to Aave
+        DAI.safeTransferFrom(msg.sender, address(this), additionalCollateral);
+        AAVE.deposit(daiAddress, additionalCollateral, address(this), 0);
+
+        // Save Info
         orders[_orderId] = Order({
             tokenIds: tokenIds,
             requestAmount: requestAmount,
+            interest: interest,
             period: period,
-            interest: 0,
+            additionalCollateral: additionalCollateral,
             offeror: address(0),
-            createdBlockTimestamp: block.timestamp,
-            offeredBlockTimestamp: 0
+            createdAt: block.timestamp,
+            offeredAt: 0,
+            paidLoanAt: 0,
+            withdrewAt: 0
         });
+        totalAdditionalCollateral = totalAdditionalCollateral.add(additionalCollateral);
 
-        _mint(msg.sender, _orderId);
+        // Mint Order Token
         orderId = _orderId;
         _orderId = _orderId.add(1);
-        // TODO: deposit DAI to Aave
+        _mint(msg.sender, orderId);
 
-        emit MintOrder(msg.sender, orderId, tokenIds, requestAmount, period, block.timestamp);
+        emit MintOrder(
+            msg.sender,
+            orderId,
+            tokenIds,
+            requestAmount,
+            interest,
+            period,
+            additionalCollateral,
+            block.timestamp
+        );
     }
 
     function burnOrder(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
-        require(orders[orderId].offeredBlockTimestamp == 0, 'PawnSpace: ALREADY_OFFERED');
+        require(orders[orderId].offeredAt == 0, 'PawnSpace: ALREADY_OFFERED');
 
+        // Return Collateral Tokens
         for (uint256 i = 0; i < orders[orderId].tokenIds.length; i++) {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }
+
+        // Withdraw DAI from Aave
+        uint256 balance = aDAI.balanceOf(address(this));
+        uint256 additionalCollateral = orders[orderId].additionalCollateral.mul(balance).div(totalAdditionalCollateral);
+        AAVE.withdraw(daiAddress, additionalCollateral, msg.sender);
+        totalAdditionalCollateral = totalAdditionalCollateral.sub(orders[orderId].additionalCollateral);
+
+        // Burn Order Token
         _burn(orderId);
         emit BurnOrder(msg.sender, orderId);
     }
@@ -160,56 +205,62 @@ contract PawnSpace is IPawnSpace, ERC721 {
     function offer(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) != msg.sender, 'PawnSpace: FORBIDDEN');
-        require(orders[orderId].offeredBlockTimestamp == 0, 'PawnSpace: ALREADY_OFFERED');
-        require(
-            IERC20(STABLE_TOKEN).balanceOf(msg.sender) >= orders[orderId].requestAmount,
-            'PawnSpace: NOT_ENOUGH_BALANCE'
-        );
-        require(
-            IERC20(STABLE_TOKEN).allowance(msg.sender, address(this)) >= orders[orderId].requestAmount,
-            'PawnSpace: NO_ALLOWANCE'
-        );
+        require(orders[orderId].offeredAt == 0, 'PawnSpace: ALREADY_OFFERED');
+        require(DAI.balanceOf(msg.sender) >= orders[orderId].requestAmount, 'PawnSpace: NOT_ENOUGH_BALANCE');
+        require(DAI.allowance(msg.sender, address(this)) >= orders[orderId].requestAmount, 'PawnSpace: NO_ALLOWANCE');
 
+        // Save Info
         orders[orderId].offeror = msg.sender;
-        orders[orderId].offeredBlockTimestamp = block.timestamp;
-        // TODO: How to decide the interest
-        uint256 interest = 0;
-        orders[orderId].interest = interest;
+        orders[orderId].offeredAt = block.timestamp;
 
-        emit Offer(msg.sender, orderId, interest, block.timestamp);
+        // Lending
+        DAI.safeTransferFrom(msg.sender, ownerOf(orderId), orders[orderId].requestAmount);
+
+        emit Offer(msg.sender, orderId, block.timestamp);
     }
 
-    function payback(uint256 orderId) external override {
+    function payLoan(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
-        require(orders[orderId].offeredBlockTimestamp > 0, 'PawnSpace: NOT_OFFERED');
-        require(
-            orders[orderId].offeredBlockTimestamp.add(orders[orderId].period) >= block.timestamp,
-            'PawnSpace: EXPIRED'
-        );
+        require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
+        require(orders[orderId].offeredAt.add(orders[orderId].period) >= block.timestamp, 'PawnSpace: EXPIRED');
+        require(orders[orderId].paidLoanAt == 0, 'PawnSpace: ALREADY_PAIDLOAN');
 
-        IERC20(STABLE_TOKEN).safeTransferFrom(
+        // Save Info
+        orders[orderId].paidLoanAt = block.timestamp;
+
+        // Pay Loan
+        DAI.safeTransferFrom(
             msg.sender,
             orders[orderId].offeror,
             orders[orderId].requestAmount.add(orders[orderId].interest)
         );
+
+        // Send Back NFT tokens
         for (uint256 i = 0; i < orders[orderId].tokenIds.length; i++) {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }
-        // TODO: withdraw DAI from Aave and send back to borrower
+
+        // Withdraw DAI from Aave
+        uint256 balance = aDAI.balanceOf(address(this));
+        uint256 additionalCollateral = orders[orderId].additionalCollateral.mul(balance).div(totalAdditionalCollateral);
+        AAVE.withdraw(daiAddress, additionalCollateral, msg.sender);
+        totalAdditionalCollateral = totalAdditionalCollateral.sub(orders[orderId].additionalCollateral);
 
         emit Payback(msg.sender, orderId);
     }
 
     function withdraw(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
-        require(orders[orderId].offeredBlockTimestamp > 0, 'PawnSpace: NOT_OFFERED');
-        require(
-            orders[orderId].offeredBlockTimestamp.add(orders[orderId].period) < block.timestamp,
-            'PawnSpace: NOT_EXPIRED'
-        );
         require(orders[orderId].offeror == msg.sender, 'PawnSpace: NOT_LENDER');
+        require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
+        require(orders[orderId].offeredAt.add(orders[orderId].period) < block.timestamp, 'PawnSpace: NOT_EXPIRED');
+        require(orders[orderId].withdrewAt == 0, 'PawnSpace: ALREADY_WITHDRAWN');
 
+        // Save Info
+        orders[orderId].withdrewAt = block.timestamp;
+
+        // Withdraw NFT tokens
         for (uint256 i = 0; i < orders[orderId].tokenIds.length; i++) {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }

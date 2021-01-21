@@ -36,9 +36,6 @@ contract('PawnSpace', (_accounts) => {
     it('getOrder', async () => {
       await expectRevert(this.pawnSpace.getOrder(0), 'PawnSpace: NONEXIST_ORDER')
     })
-    it('getOffer', async () => {
-      await expectRevert(this.pawnSpace.getOffer(0), 'PawnSpace: NONEXIST_OFFER')
-    })
   })
   describe('Functions', async () => {
     before(async () => {
@@ -53,14 +50,21 @@ contract('PawnSpace', (_accounts) => {
     it('order', async () => {
       const period = 30 * 24 * 60 * 60
       const requestAmount = 100
+      const interest = 10
+      const additionalCollateral = 30
 
-      await expectRevert(this.pawnSpace.order([], requestAmount, period), 'PawnSpace: NO_NFT')
       await expectRevert(
-        this.pawnSpace.order([0], requestAmount, period),
+        this.pawnSpace.order([], requestAmount, interest, period, additionalCollateral),
+        'PawnSpace: NO_NFT'
+      )
+      await expectRevert(
+        this.pawnSpace.order([0], requestAmount, interest, period, additionalCollateral),
         'ERC721: transfer caller is not owner nor approved'
       )
       this.erc721_test.approve(this.pawnSpace.address, 0, { from: orderor1 })
-      const receipt = await this.pawnSpace.order([0], requestAmount, period, { from: orderor1 })
+      const receipt = await this.pawnSpace.order([0], requestAmount, interest, period, additionalCollateral, {
+        from: orderor1,
+      })
       const block = await web3.eth.getBlock('latest')
 
       const totalSupply = await this.pawnSpace.totalSupply()
