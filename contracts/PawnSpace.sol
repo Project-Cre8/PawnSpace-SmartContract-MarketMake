@@ -19,10 +19,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
 
     uint256 public constant MINIMUM_LIQUIDITY = 10**3;
     bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
-    address private daiAddress;
-    IERC20 private DAI;
-    IERC20 private aDAI;
-    ILendingPool private AAVE;
+    address public stableTokenAddress;
+    IERC20 public stableToken;
+    IERC20 public aToken;
+    ILendingPool public lendingPool;
 
     address public override factory;
     address public override nftToken;
@@ -102,32 +102,42 @@ contract PawnSpace is IPawnSpace, ERC721 {
         withdrewAt = orders[id].withdrewAt;
     }
 
-    function _safeTransfer(
-        address token,
-        address to,
-        uint256 value
-    ) private {
-        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(SELECTOR, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'PawnSpace: TRANSFER_FAILED');
-    }
-
     constructor() ERC721('PawnSpace', 'PWN') {
         factory = msg.sender;
     }
 
     // called once by the factory at time of deployment
     function initialize(
+        address _nft,
         address _token,
-        address _dai,
-        address _aDai,
+        address _aToken,
         address _lendingPool
     ) external override {
         require(msg.sender == factory, 'PawnSpace: FORBIDDEN'); // sufficient check
-        nftToken = _token;
-        daiAddress = _dai;
-        DAI = IERC20(daiAddress);
-        aDAI = IERC20(_aDai);
-        AAVE = ILendingPool(_lendingPool);
+        nftToken = _nft;
+        stableTokenAddress = _token;
+        stableToken = IERC20(stableTokenAddress);
+        aToken = IERC20(_aToken);
+        lendingPool = ILendingPool(_lendingPool);
+    }
+
+    function uint2str(uint256 _i) internal pure returns (string memory _uintAsString) {
+        if (_i == 0) {
+            return '0';
+        }
+        uint256 j = _i;
+        uint256 len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint256 k = len - 1;
+        while (_i != 0) {
+            bstr[k--] = bytes1(uint8(48 + (_i % 10)));
+            _i /= 10;
+        }
+        return string(bstr);
     }
 
     function order(
@@ -145,9 +155,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
             IERC721(nftToken).transferFrom(msg.sender, address(this), tokenIds[i]);
         }
 
-        // Deposit DAI to Aave
-        DAI.safeTransferFrom(msg.sender, address(this), additionalCollateral);
-        AAVE.deposit(daiAddress, additionalCollateral, address(this), 0);
+        // Deposit token to Aave
+        stableToken.transferFrom(msg.sender, address(this), additionalCollateral);
+        stableToken.approve(address(lendingPool), additionalCollateral);
+        lendingPool.deposit(stableTokenAddress, additionalCollateral, address(this), 0);
 
         // Save Info
         orders[_orderId] = Order({
@@ -191,10 +202,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }
 
-        // Withdraw DAI from Aave
-        uint256 balance = aDAI.balanceOf(address(this));
+        // Withdraw token from Aave
+        uint256 balance = aToken.balanceOf(address(this));
         uint256 additionalCollateral = orders[orderId].additionalCollateral.mul(balance).div(totalAdditionalCollateral);
-        AAVE.withdraw(daiAddress, additionalCollateral, msg.sender);
+        lendingPool.withdraw(stableTokenAddress, additionalCollateral, msg.sender);
         totalAdditionalCollateral = totalAdditionalCollateral.sub(orders[orderId].additionalCollateral);
 
         // Burn Order Token
@@ -206,20 +217,23 @@ contract PawnSpace is IPawnSpace, ERC721 {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) != msg.sender, 'PawnSpace: FORBIDDEN');
         require(orders[orderId].offeredAt == 0, 'PawnSpace: ALREADY_OFFERED');
-        require(DAI.balanceOf(msg.sender) >= orders[orderId].requestAmount, 'PawnSpace: NOT_ENOUGH_BALANCE');
-        require(DAI.allowance(msg.sender, address(this)) >= orders[orderId].requestAmount, 'PawnSpace: NO_ALLOWANCE');
+        require(stableToken.balanceOf(msg.sender) >= orders[orderId].requestAmount, 'PawnSpace: NOT_ENOUGH_BALANCE');
+        require(
+            stableToken.allowance(msg.sender, address(this)) >= orders[orderId].requestAmount,
+            'PawnSpace: NO_ALLOWANCE'
+        );
 
         // Save Info
         orders[orderId].offeror = msg.sender;
         orders[orderId].offeredAt = block.timestamp;
 
         // Lending
-        DAI.safeTransferFrom(msg.sender, ownerOf(orderId), orders[orderId].requestAmount);
+        stableToken.safeTransferFrom(msg.sender, ownerOf(orderId), orders[orderId].requestAmount);
 
         emit Offer(msg.sender, orderId, block.timestamp);
     }
 
-    function payLoan(uint256 orderId) external override {
+    function payBack(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
         require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
@@ -230,7 +244,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
         orders[orderId].paidLoanAt = block.timestamp;
 
         // Pay Loan
-        DAI.safeTransferFrom(
+        stableToken.safeTransferFrom(
             msg.sender,
             orders[orderId].offeror,
             orders[orderId].requestAmount.add(orders[orderId].interest)
@@ -241,10 +255,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }
 
-        // Withdraw DAI from Aave
-        uint256 balance = aDAI.balanceOf(address(this));
+        // Withdraw token from Aave
+        uint256 balance = aToken.balanceOf(address(this));
         uint256 additionalCollateral = orders[orderId].additionalCollateral.mul(balance).div(totalAdditionalCollateral);
-        AAVE.withdraw(daiAddress, additionalCollateral, msg.sender);
+        lendingPool.withdraw(stableTokenAddress, additionalCollateral, msg.sender);
         totalAdditionalCollateral = totalAdditionalCollateral.sub(orders[orderId].additionalCollateral);
 
         emit Payback(msg.sender, orderId);

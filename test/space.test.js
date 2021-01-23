@@ -3,7 +3,9 @@ const { BN, constants, balance, expectEvent, expectRevert } = require('@openzepp
 const PawnSpace = artifacts.require('PawnSpace')
 const PawnFactory = artifacts.require('PawnFactory')
 const ERC721_test = artifacts.require('ERC721_test')
-const ERC20_test = artifacts.require('ERC20_test') //DAI
+const ERC20_test = artifacts.require('ERC20_test') //Stable Coin
+const LendingPool_test = artifacts.require('LendingPool_test')
+const AToken_test = artifacts.require('AToken_test')
 
 contract('PawnSpace', (_accounts) => {
   // Initial settings
@@ -20,9 +22,19 @@ contract('PawnSpace', (_accounts) => {
     await this.pawnFactory.createSpace(ERC721_test.address)
     const spaceAddress = await this.pawnFactory.allSpaces(0)
     this.pawnSpace = await PawnSpace.at(spaceAddress)
+    this.lendingPool = await LendingPool_test.deployed()
+    this.aToken = await AToken_test.deployed()
   })
 
   describe('Default values', async () => {
+    it('factory', async () => {
+      const factory = await this.pawnSpace.factory()
+      assert.equal(factory, this.pawnFactory.address, 'Invalid factory address')
+    })
+    it('nftToken', async () => {
+      const nftToken = await this.pawnSpace.nftToken()
+      assert.equal(nftToken, this.erc721_test.address, 'Invalid NFT address')
+    })
     it('totalSupply', async () => {
       const totalSupply = await this.pawnSpace.totalSupply()
       assert.equal(parseInt(totalSupply), 0, 'Invalid total supply')
@@ -39,13 +51,17 @@ contract('PawnSpace', (_accounts) => {
   })
   describe('Functions', async () => {
     before(async () => {
-      this.erc721_test.mint(orderor1)
-      this.erc721_test.mint(orderor2)
-      this.erc721_test.mint(orderor2)
+      await this.erc721_test.mint(orderor1)
+      await this.erc721_test.mint(orderor2)
+      await this.erc721_test.mint(orderor2)
+      await this.erc20_test.mint(100, { from: orderor1 })
     })
     it('initialize', async () => {
       const dummyAddress = _accounts[9]
-      await expectRevert(this.pawnSpace.initialize(dummyAddress), 'PawnSpace: FORBIDDEN')
+      await expectRevert(
+        this.pawnSpace.initialize(dummyAddress, dummyAddress, dummyAddress, dummyAddress),
+        'PawnSpace: FORBIDDEN'
+      )
     })
     it('order', async () => {
       const period = 30 * 24 * 60 * 60
@@ -61,7 +77,9 @@ contract('PawnSpace', (_accounts) => {
         this.pawnSpace.order([0], requestAmount, interest, period, additionalCollateral),
         'ERC721: transfer caller is not owner nor approved'
       )
-      this.erc721_test.approve(this.pawnSpace.address, 0, { from: orderor1 })
+      await this.erc721_test.approve(this.pawnSpace.address, 0, { from: orderor1 })
+      await this.erc20_test.approve(this.pawnSpace.address, additionalCollateral, { from: orderor1 })
+      const allow = await this.erc20_test.allowance(orderor1, this.pawnSpace.address)
       const receipt = await this.pawnSpace.order([0], requestAmount, interest, period, additionalCollateral, {
         from: orderor1,
       })
@@ -69,23 +87,33 @@ contract('PawnSpace', (_accounts) => {
 
       const totalSupply = await this.pawnSpace.totalSupply()
       assert.equal(parseInt(totalSupply), 1, 'Invalid total supply')
+
       const orders = await this.pawnSpace.getOrders()
       assert.equal(parseInt(orders[0]), 0, 'Invalid orders')
+
       const order = await this.pawnSpace.getOrder(0)
       assert.equal(parseInt(order.tokenIds[0]), 0, 'Invalid tokenIds')
       assert.equal(order.owner, orderor1, 'Invalid owner')
       assert.equal(parseInt(order.requestAmount), requestAmount, 'Invalid requestAmount')
-      assert.equal(parseInt(order.borrowingPeriod), period, 'Invalid borrowingPeriod')
-      assert.equal(parseInt(order.createdBlockTimestamp), block.timestamp, 'Invalid createdBlockTimestamp')
-      assert.equal(parseInt(order.offeredBlockTimestamp), 0, 'Invalid offeredBlockTimestamp')
-      assert.equal(parseInt(order.offerId), 0, 'Invalid offerId')
+      assert.equal(parseInt(order.interest), interest, 'Invalid interest')
+      assert.equal(parseInt(order.period), period, 'Invalid period')
+      assert.equal(parseInt(order.additionalCollateral), additionalCollateral, 'Invalid additionalCollateral')
+      assert.equal(parseInt(order.createdAt), block.timestamp, 'Invalid createdAt')
+      assert.equal(parseInt(order.offeredAt), 0, 'Invalid offeredAt')
+      assert.equal(parseInt(order.paidLoanAt), 0, 'Invalid paidLoanAt')
+      assert.equal(parseInt(order.withdrewAt), 0, 'Invalid withdrewAt')
+
+      const balance = await this.aToken.balanceOf(this.pawnSpace.address)
+      assert.equal(balance, additionalCollateral, 'Invalid aToken balance')
       // expectEvent(receipt, 'MintOrder', {
       //   sender: orderor1,
       //   orderId: '0',
       //   tokenIds: [new BN(0)], // Could not compare array(tokenIds)
-      //   requestToken: requestToken,
+      //   requestAmount: requestAmount.toString(),
+      //   interest: interest,
       //   period: period.toString(),
-      //   requestAmount: requestAmount.toString()
+      //   additionalCollateral: additionalCollateral,
+      //   createdAt: block.timestamp,
       // })
     })
     it('burnOrder', async () => {

@@ -39,7 +39,7 @@ interface IPawnSpace {
 
     function offer(uint256 orderId) external;
 
-    function payLoan(uint256 offerId) external;
+    function payBack(uint256 offerId) external;
 
     function withdraw(uint256 orderId) external;
 
