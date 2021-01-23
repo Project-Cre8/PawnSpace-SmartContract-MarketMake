@@ -4,13 +4,14 @@ const ERC20_test = artifacts.require('ERC20_test')
 const LendingPool_test = artifacts.require('LendingPool_test')
 const AToken_test = artifacts.require('AToken_test')
 
-const DAI = '0xc4375b7de8af5a38a93548eb8453a498222c4ff2'
-const aDAI = '0xdcf0af9e59c002fa3aa091a46196b37530fd48a8'
-const AAVE = '0x9fe532197ad76c5a68961439604c037eb79681f0'
+const myAddress = '0x66283ec04D16B25dD2DEa83A440b9Ee32221055B'
+const token = '0xe22da380ee6B445bb8273C81944ADEB6E8450422'
+const aToken = '0xe12AFeC5aa12Cf614678f9bFeeB98cA9Bb95b5B0'
+const AAVE = '0x9FE532197ad76c5a68961439604C037EB79681F0'
 
 module.exports = async function (deployer, network, accounts) {
   const owner = accounts[0]
-  const setter = accounts[1]
+  let setter = accounts[1]
   const orderor1 = accounts[2]
   const orderor2 = accounts[3]
   const offeror1 = accounts[4]
@@ -18,9 +19,10 @@ module.exports = async function (deployer, network, accounts) {
   let stableTokenAddress
   let aTokenAddress
   let lendingPoolAddress
-  if (network === 'kovan') {
-    stableTokenAddress = DAI
-    aTokenAddress = aDAI
+  if (network === 'kovan' || network === 'kovan-fork') {
+    setter = myAddress
+    stableTokenAddress = token
+    aTokenAddress = aToken
     lendingPoolAddress = AAVE
   } else {
     await deployer.deploy(ERC721_test, 'test721', 'test721')
