@@ -38,7 +38,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
         address offeror;
         uint256 createdAt;
         uint256 offeredAt;
-        uint256 paidLoanAt;
+        uint256 paidBackAt;
         uint256 withdrewAt;
     }
 
@@ -83,7 +83,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
             address offeror,
             uint256 createdAt,
             uint256 offeredAt,
-            uint256 paidLoanAt,
+            uint256 paidBackAt,
             uint256 withdrewAt
         )
     {
@@ -98,7 +98,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
         offeror = orders[id].offeror;
         createdAt = orders[id].createdAt;
         offeredAt = orders[id].offeredAt;
-        paidLoanAt = orders[id].paidLoanAt;
+        paidBackAt = orders[id].paidBackAt;
         withdrewAt = orders[id].withdrewAt;
     }
 
@@ -170,7 +170,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
             offeror: address(0),
             createdAt: block.timestamp,
             offeredAt: 0,
-            paidLoanAt: 0,
+            paidBackAt: 0,
             withdrewAt: 0
         });
         totalAdditionalCollateral = totalAdditionalCollateral.add(additionalCollateral);
@@ -238,10 +238,10 @@ contract PawnSpace is IPawnSpace, ERC721 {
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
         require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
         require(orders[orderId].offeredAt.add(orders[orderId].period) >= block.timestamp, 'PawnSpace: EXPIRED');
-        require(orders[orderId].paidLoanAt == 0, 'PawnSpace: ALREADY_PAIDLOAN');
+        require(orders[orderId].paidBackAt == 0, 'PawnSpace: ALREADY_PAIDLOAN');
 
         // Save Info
-        orders[orderId].paidLoanAt = block.timestamp;
+        orders[orderId].paidBackAt = block.timestamp;
 
         // Pay Loan
         stableToken.safeTransferFrom(
@@ -261,14 +261,14 @@ contract PawnSpace is IPawnSpace, ERC721 {
         lendingPool.withdraw(stableTokenAddress, additionalCollateral, msg.sender);
         totalAdditionalCollateral = totalAdditionalCollateral.sub(orders[orderId].additionalCollateral);
 
-        emit Payback(msg.sender, orderId);
+        emit Payback(msg.sender, orderId, block.timestamp);
     }
 
     function withdraw(uint256 orderId) external override {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(orders[orderId].offeror == msg.sender, 'PawnSpace: NOT_LENDER');
         require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
-        require(orders[orderId].offeredAt.add(orders[orderId].period) < block.timestamp, 'PawnSpace: NOT_EXPIRED');
+        require(orders[orderId].offeredAt.add(orders[orderId].period) <= block.timestamp, 'PawnSpace: NOT_EXPIRED');
         require(orders[orderId].withdrewAt == 0, 'PawnSpace: ALREADY_WITHDRAWN');
 
         // Save Info
@@ -279,6 +279,6 @@ contract PawnSpace is IPawnSpace, ERC721 {
             IERC721(nftToken).transferFrom(address(this), msg.sender, orders[orderId].tokenIds[i]);
         }
 
-        emit Withdraw(msg.sender, orderId);
+        emit Withdraw(msg.sender, orderId, block.timestamp);
     }
 }

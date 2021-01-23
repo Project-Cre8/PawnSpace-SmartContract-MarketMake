@@ -23,7 +23,7 @@ interface IPawnSpace {
             address offeror,
             uint256 createdAt,
             uint256 offeredAt,
-            uint256 paidLoanAt,
+            uint256 paidBackAt,
             uint256 withdrewAt
         );
 
@@ -62,6 +62,6 @@ interface IPawnSpace {
     );
     event BurnOrder(address indexed sender, uint256 orderId);
     event Offer(address indexed sender, uint256 orderId, uint256 offeredAt);
-    event Payback(address indexed sender, uint256 orderId);
-    event Withdraw(address indexed sender, uint256 orderId);
+    event Payback(address indexed sender, uint256 orderId, uint256 paidBackAt);
+    event Withdraw(address indexed sender, uint256 orderId, uint256 withdrewAt);
 }

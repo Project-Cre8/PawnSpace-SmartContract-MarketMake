@@ -24,7 +24,7 @@ module.exports = async function (deployer, network, accounts) {
     lendingPoolAddress = AAVE
   } else {
     await deployer.deploy(ERC721_test, 'test721', 'test721')
-    await deployer.deploy(ERC20_test, 1000)
+    await deployer.deploy(ERC20_test, 1000000)
     await deployer.deploy(AToken_test, ERC20_test.address)
     await deployer.deploy(LendingPool_test, AToken_test.address)
     // TODO: Need test tokens
