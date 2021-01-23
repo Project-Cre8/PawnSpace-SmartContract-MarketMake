@@ -237,7 +237,7 @@ contract PawnSpace is IPawnSpace, ERC721 {
         require(_exists(orderId), 'PawnSpace: NONEXIST_ORDER');
         require(ownerOf(orderId) == msg.sender, 'PawnSpace: NOT_OWNER');
         require(orders[orderId].offeredAt > 0, 'PawnSpace: NOT_OFFERED');
-        require(orders[orderId].offeredAt.add(orders[orderId].period) >= block.timestamp, 'PawnSpace: EXPIRED');
+        require(orders[orderId].offeredAt.add(orders[orderId].period) > block.timestamp, 'PawnSpace: EXPIRED');
         require(orders[orderId].paidBackAt == 0, 'PawnSpace: ALREADY_PAIDLOAN');
 
         // Save Info
