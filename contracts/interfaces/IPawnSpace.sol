@@ -17,41 +17,51 @@ interface IPawnSpace {
             uint256[] memory tokenIds,
             address owner,
             uint256 requestAmount,
-            uint256 borrowingPeriod,
-            uint256 createdBlockTimestamp,
-            uint256 offeredBlockTimestamp,
-            uint256 offerId
-        );
-
-    function getOffer(uint256 offerId)
-        external
-        view
-        returns (
-            uint256 orderId,
-            address offeror,
             uint256 interest,
-            uint256 createdBlockTimestamp
+            uint256 period,
+            uint256 additionalCollateral,
+            address offeror,
+            uint256 createdAt,
+            uint256 offeredAt,
+            uint256 paidBackAt,
+            uint256 withdrewAt
         );
 
     function order(
         uint256[] calldata tokenIds,
         uint256 requestAmount,
-        uint256 period
+        uint256 interest,
+        uint256 period,
+        uint256 additionalCollateral
     ) external returns (uint256 orderId);
 
     function burnOrder(uint256 orderId) external;
 
-    function offer(uint256 orderId) external returns (uint256 offerId);
+    function offer(uint256 orderId) external;
 
-    function payback(uint256 offerId) external;
+    function payBack(uint256 offerId) external;
 
     function withdraw(uint256 orderId) external;
 
-    function initialize(address) external;
+    function initialize(
+        address,
+        address,
+        address,
+        address
+    ) external;
 
-    event MintOrder(address indexed sender, uint256 orderId, uint256[] tokenIds, uint256 requestAmount, uint256 period);
+    event MintOrder(
+        address indexed sender,
+        uint256 orderId,
+        uint256[] tokenIds,
+        uint256 requestAmount,
+        uint256 interest,
+        uint256 period,
+        uint256 additionalCollateral,
+        uint256 createdAt
+    );
     event BurnOrder(address indexed sender, uint256 orderId);
-    event MintOffer(address indexed sender, uint256 offerId, uint256 orderId, uint256 interest);
-    event Payback(address indexed sender, uint256 orderId, uint256 offerId);
-    event Withdraw(address indexed sender, uint256 orderId);
+    event Offer(address indexed sender, uint256 orderId, uint256 offeredAt);
+    event Payback(address indexed sender, uint256 orderId, uint256 paidBackAt);
+    event Withdraw(address indexed sender, uint256 orderId, uint256 withdrewAt);
 }

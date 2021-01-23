@@ -2,7 +2,7 @@
 pragma solidity >=0.6.0 <0.8.0;
 
 interface IPawnFactory {
-    event PairCreated(address indexed token, address space, uint256);
+    event SpaceCreated(address indexed token, address space, uint256 length);
 
     function feeTo() external view returns (address);
 

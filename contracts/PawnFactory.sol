@@ -7,32 +7,41 @@ import './PawnSpace.sol';
 contract PawnFactory is IPawnFactory {
     address public override feeTo;
     address public override feeToSetter;
+    address public token;
+    address public aToken;
+    address public lendingPool;
 
     mapping(address => address) public override getSpace;
     address[] public override allSpaces;
 
-    event SpaceCreated(address indexed token, address space, uint256 length);
-
-    constructor(address _feeToSetter) {
+    constructor(
+        address _feeToSetter,
+        address _token,
+        address _aToken,
+        address _lendingPool
+    ) {
         feeToSetter = _feeToSetter;
+        token = _token;
+        aToken = _aToken;
+        lendingPool = _lendingPool;
     }
 
     function allSpacesLength() external view override returns (uint256) {
         return allSpaces.length;
     }
 
-    function createSpace(address token) external override returns (address space) {
-        require(token != address(0), 'PawnFactory: ZERO_ADDRESS');
-        require(getSpace[token] == address(0), 'PawnFactory: SPACE_EXISTS');
+    function createSpace(address nft) external override returns (address space) {
+        require(nft != address(0), 'PawnFactory: ZERO_ADDRESS');
+        require(getSpace[nft] == address(0), 'PawnFactory: SPACE_EXISTS');
         bytes memory bytecode = type(PawnSpace).creationCode;
-        bytes32 salt = keccak256(abi.encodePacked(token));
+        bytes32 salt = keccak256(abi.encodePacked(nft));
         assembly {
             space := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IPawnSpace(space).initialize(token);
-        getSpace[token] = space;
+        IPawnSpace(space).initialize(nft, token, aToken, lendingPool);
+        getSpace[nft] = space;
         allSpaces.push(space);
-        emit SpaceCreated(token, space, allSpaces.length);
+        emit SpaceCreated(nft, space, allSpaces.length);
     }
 
     function setFeeTo(address _feeTo) external override {
