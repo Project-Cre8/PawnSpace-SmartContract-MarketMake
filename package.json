@@ -10,7 +10,8 @@
     "@openzeppelin/contracts": "^3.3.0"
   },
   "devDependencies": {
-    "@openzeppelin/test-helpers": "^0.5.10"
+    "@openzeppelin/test-helpers": "^0.5.10",
+    "@truffle/hdwallet-provider": "^1.2.1"
   },
   "scripts": {
     "build": "truffle build",

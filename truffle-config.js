@@ -63,7 +63,7 @@ module.exports = {
     // timeoutBlocks: 200,  // # of blocks before a deployment times out  (minimum/default: 50)
     // skipDryRun: true     // Skip dry run before migrations? (default: false for public nets )
     // },
-    kovan: {
+    kovan: {
       provider: () => new HDWalletProvider(mnemonic, `https://kovan.infura.io/v3/${process.env.INFURA_ID}`),
       network_id: 42, // Ropsten's id
       // gas: 5500000, // Ropsten has a lower block limit than mainnet
