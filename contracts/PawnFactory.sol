@@ -41,7 +41,7 @@ contract PawnFactory is IPawnFactory {
         IPawnSpace(space).initialize(nft, token, aToken, lendingPool);
         getSpace[nft] = space;
         allSpaces.push(space);
-        emit SpaceCreated(nft, space, allSpaces.length);
+        emit SpaceCreated(nft, space, allSpaces.length, token, aToken, lendingPool);
     }
 
     function setFeeTo(address _feeTo) external override {
